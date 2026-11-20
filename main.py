@@ -1,130 +1,2 @@
-import os,sys,urllib.request as U,json as J
-V=[0,100,320,330,500,900,0]
-N=[(-2,-1),(-2,1),(-1,-2),(-1,2),(1,-2),(1,2),(2,-1),(2,1)]
-B=[(-1,-1),(-1,1),(1,-1),(1,1)];R=[(0,-1),(0,1),(-1,0),(1,0)];A=B+R
-Q=lambda s:(8-int(s[1]))*8+ord(s[0])-97
-kp=lambda b,s:b.index(12|s)
-ev=lambda b,s:sum((1 if p&1==s else-1)*V[p>>1]for p in b)
-def parse(f):
- p=f.split();b=[0]*64;q=0
- for c in p[0]:
-  if c=='/':continue
-  if c.isdigit():q+=int(c)
-  else:b[q]=('_pnbrqk'.find(c.lower())<<1)|c.isupper();q+=1
- s=int(p[1]=='w');cr=sum(1<<i for i,c in enumerate('KQkq')if c in p[2])
- ep=Q(p[3])if len(p)>3 and p[3]!='-'else-1
- return b,s,cr,ep
-def att(b,sq,by):
- r=sq>>3;f=sq&7;pr=r+(1 if by else-1)
- if 0<=pr<8:
-  for d in(-1,1):
-   if 0<=f+d<8 and b[pr*8+f+d]==(2|by):return 1
- for dr,df in N:
-  nr=r+dr;nf=f+df
-  if 0<=nr<8 and 0<=nf<8 and b[nr*8+nf]==(4|by):return 1
- for dr,df in A:
-  nr=r+dr;nf=f+df
-  if 0<=nr<8 and 0<=nf<8:
-   if b[nr*8+nf]==(12|by):return 1
-   dg=dr and df
-   while 0<=nr<8 and 0<=nf<8:
-    p=b[nr*8+nf]
-    if p:
-     if p&1==by and((dg and p>>1 in(3,5))or(not dg and p>>1 in(4,5))):return 1
-     break
-    nr+=dr;nf+=df
- return 0
-def gen(b,s,cr,ep):
- mv=[]
- for sq in range(64):
-  p=b[sq]
-  if not p or p&1!=s:continue
-  t=p>>1;r=sq>>3;f=sq&7
-  if t==1:
-   dr=-1 if s else 1;ns=sq+dr*8
-   if 0<=ns<64 and not b[ns]:
-    mv+=[(sq,ns,-1)]
-    if r==(6 if s else 1)and not b[sq+dr*16]:mv+=[(sq,sq+dr*16,-1)]
-   for df in(-1,1):
-    nf=f+df
-    if 0<=nf<8:
-     ns=sq+dr*8+df
-     if 0<=ns<64:
-      if b[ns]and b[ns]&1!=s:mv+=[(sq,ns,-1)]
-      elif ns==ep:mv+=[(sq,ns,sq+df)]
-  elif t==2:
-   for dr2,df in N:
-    nr=r+dr2;nf=f+df
-    if 0<=nr<8 and 0<=nf<8:
-     ns=nr*8+nf
-     if not b[ns]or b[ns]&1!=s:mv+=[(sq,ns,-1)]
-  elif t==6:
-   for dr2,df in A:
-    nr=r+dr2;nf=f+df
-    if 0<=nr<8 and 0<=nf<8:
-     ns=nr*8+nf
-     if not b[ns]or b[ns]&1!=s:mv+=[(sq,ns,-1)]
-   ks=60 if s else 4;o=s^1
-   if sq==ks:
-    if cr&(1 if s else 4)and not(b[ks+1]or b[ks+2])and b[ks+3]==(8|s)and not(att(b,ks,o)or att(b,ks+1,o)or att(b,ks+2,o)):mv+=[(ks,ks+2,-1)]
-    if cr&(2 if s else 8)and not(b[ks-1]or b[ks-2]or b[ks-3])and b[ks-4]==(8|s)and not(att(b,ks,o)or att(b,ks-1,o)or att(b,ks-2,o)):mv+=[(ks,ks-2,-1)]
-  else:
-   ds=B if t==3 else R if t==4 else A
-   for dr2,df in ds:
-    nr=r+dr2;nf=f+df
-    while 0<=nr<8 and 0<=nf<8:
-     ns=nr*8+nf
-     if b[ns]:
-      if b[ns]&1!=s:mv+=[(sq,ns,-1)]
-      break
-     mv+=[(sq,ns,-1)];nr+=dr2;nf+=df
- return mv
-def mk(b,s,cr,ep,fr,to,epc):
- nb=b[:];nb[to]=nb[fr];nb[fr]=0;nc=cr;ne=-1
- if epc>=0:nb[epc]=0
- t=nb[to]>>1;c=nb[to]&1
- if t==1:
-  if(to>>3)==(0 if c else 7):nb[to]=10|c
-  if abs(fr-to)==16:ne=(fr+to)//2
- if t==6:
-  nc&=~(3 if c else 12);d=to-fr
-  if d==2:nb[to-1]=nb[to+1];nb[to+1]=0
-  elif d==-2:nb[to+1]=nb[to-2];nb[to-2]=0
- for x,m in[(0,8),(7,4),(56,2),(63,1)]:
-  if fr==x or to==x:nc&=~m
- return nb,nc,ne
-def srch(b,s,cr,ep,d,a,bt):
- if d<=0:return ev(b,s)
- mv=gen(b,s,cr,ep);fd=0
- mv.sort(key=lambda m:-V[b[m[1]]>>1])
- for m in mv:
-  nb,nc,ne=mk(b,s,cr,ep,m[0],m[1],m[2])
-  if att(nb,kp(nb,s),s^1):continue
-  fd=1;sc=-srch(nb,s^1,nc,ne,d-1,-bt,-a)
-  if sc>=bt:return bt
-  if sc>a:a=sc
- if not fd:return-(30000+d)if att(b,kp(b,s),s^1)else 0
- return a
-PM={'q':10,'r':8,'b':6,'n':4}
-def run():
- u=os.environ.get('MAKEFUN_ENV_URL')
- if not u:sys.exit(1)
- H={'Content-Type':'application/json'}
- def post(p,d):return J.loads(U.urlopen(U.Request(u+p,method='POST',headers=H,data=J.dumps(d).encode()),timeout=30).read())
- while True:
-  d=post('/game',{})
-  if d.get('status')=='done':sys.exit(0)
-  fen=d['fen'];leg=d['legal_moves'];gid=d['game']
-  if not leg:continue
-  b,s,cr,ep=parse(fen);best=leg[0];bs=-999999
-  for m in leg:
-   fr=Q(m[:2]);to=Q(m[2:4]);epc=-1
-   t=b[fr]>>1;c=b[fr]&1
-   if t==1 and to==ep:epc=to+(8 if c else-8)
-   nb,nc,ne=mk(b,s,cr,ep,fr,to,epc)
-   if len(m)==5:nb[to]=PM.get(m[4],10)|c
-   sc=-srch(nb,s^1,nc,ne,4,-999999,999999)
-   if sc>bs:bs=sc;best=m
-  d=post('/move',{'game':gid,'move':best})
-  if d.get('status')=='done':sys.exit(0)
-if __name__=='__main__':run()
+#coding:l1
+import lzma;exec(lzma.decompress('\x000\0\0å/\0\0\0\0\0\0\x004œ%Å¯^´ÍôMÏ8õ;õ‚@‘PWv¬Ps+ò¥\0g¦Àgß£nÂÒ/(ù;rY–0‡%¦Œ€Ïï¯ŽþÉ6º®¡Hõ)$OëW]YrÔ~`wIÈï‚XûöºØÌËõÂhž‰Å"9vñ3;¯—‚°°u.ˆ—­«±¡z+eò À¿Ÿó¤éNzIÈ)ÓP%†íí³.Fþ£ˆ!xqu\nN­öhò­))bÎœ\0Ø=Õóý»ý0ý]˜‚ÀlH•ia3ªµ.eëÿžÙÊRäˆŒÄ/¥æ‰H(%³ãö >“ÄÔrãÓé½LÕ27Vc´`¶\0âü¿ëIð‘|¬ù5À±WXObRÈ”:—s•õ9ÆtÖ/çø4.úñëÿ*cô{µ\rÁ¶ånJU6H^>[`ówÅE¢2óI$ê¯l™ÐëÕê}:TÌ(eco!	ß=uæ`í³N08ÚêZË¢\nn5ý,e.\n‘4C¬[º	0²úW_ ÉàÜ+]ÐÞžZ\'Á-^}×TeCöÚ0¥Éz˜±ùÒÉcw^¯Fi6Iw,lµß÷)yInŒì%[s8#Õh§="B åóZ˜Mªt³	¿ÂœÍœl–šøØ6ôB¬ˆþè˜\\‡{õ‘Y¢ä¨óq\0xlP„_Ñ÷ÿ–¿RhRÕa©¥–Œ\n¿«dÍ‡YËÚ%J¹0¦ÑÆÞ¿`[ñ±Ê"’Ç=	NÍç¢‚óNå\r÷6,´š¯´ÁVYb8‹gÕHÑpló©Bk£J«9£kñ±Œÿ|[*mU}Îž9’"ÂÒ)PÎ"Qž×’X˜3]ªL³÷¯Ö3,z=óÁö]"‡éos×:ú¬âtÞ=]@Ë÷Y–ØWõPrõ(êá­u¤ŠÇHXóÚ©†¡ìð±Ëiüj‘ö§‘€‡«wüô p®¢Kg¤wÅ=N’%SG™ÎÎå<5KÅd~Š±2Õˆ@B{§¡Wîsèó¼¸CVoéZ·+qÚÊþÅÿ	z‚2pÞ„—lÎÑ#Z@à¼¦ÈLméqç¯žËpé•î\nG<ÓçÉ&[Ù¡å°–„ÅvK>¿ÂÔ á»É(€D³)÷bª©«;»\n3ˆ©Q‚˜›o\'PWz±ÉX‡QaS3“áqs–1\\—ƒ-cç¬8Þ°]ýRB4ÁcXƒœ¦»û!tBôR€-Cò™©-Ññ:jLÃ×Yøv9@Î½UeÖûO™ºÍP‚/Êí1/-Ÿ©s Ä	±¨pâßÕTØÈôÊUt\0™ö¬?s›4¤xþÝÛT±>Z†t1Û›a[‡*e	>Éž¡Ã„ŽtÃß|m¯\rÕ„­‡\0ÿôc6ý4}¨WÇñØX Õ˜GŸWæ¥Æù‰`Lù†‰SïV._¼ˆ·.0YÌÒÙ`ñ‚‹¤[nvêÉŠ¡"h0­z~«p\0úGÀxÍâ»`‡n_írGU(î‚qR?ÌaÙM7Û³ÍÖ\rùFSEÈ>0d×à4Zž…!y\riËñÀôÑ6 T.½7\\$G?¨ä «PzªLokèð)×‚W…ø%ñYÊÇU"ºuðÁ¬	ä!&¬–ÛkW§aàÇ¾‘zH \'5»*ÑÀØà—\'x­*bÉê(ÙCpíÄ\nîy5³ Vq›þñ©ÐŠç¸¥b“Pª–rÀÿ™¤çð½«åì$£<P¾Sè²—’¸¤N´°¥¯‰	$`eV-‹¨Ê_”7iüû,PÍRÞ†Ð¾¬?ÆÉú8³ë¶ÿCµ¸yž<.ÆyXî$\0ÝÜ6„9£›?¹¿„…öŠ`ÄrLÛsŸ—±”y\'yI9à”GÆëN3«øq}òÕ“n¯·¢ÙÉ=¥Ô~w|/Êÿ›œÅã¨ºò{ÈÎ­µ¡FÙ7¶?€£~Š:‰®AÂè|\'<í´Zü#iiørÍà+*>G!¨f‡	u³1X	X6­í<kUàìºi"ïy´\rˆ>#¦Ã°b•ËEÛn‰•ÙqÚ.c2Ëk¸rwJ\nÑ›zî‰epÔ:íB/+\\ÆVçïÀZ\08Ju^)ð=·îB‰.ezYñym4m&7ÖZ~£fµäGŒŸ~Ý¾±ƒðš=\0Ô±ýú2ðd¸T¼¯rY‡`Ò§©Ï\\¤ýJ,ŽPÚýº€9ÓWñ4—jwýç   99Ïý§oÊ0Ÿc‡Áj“&LŸoÑÁÁØ$AìœÜS¨†œ‰¸•?\0QÂs=	âNru¨).T(Ðk…\0/*}ŽáÚ\'åõ|?ÏÍ.ñÒcYáÜËzƒD.ü’Ùpc3¾×+0Ã&Èå µ[)OHù\\{Ë4££|±¹¬!@Úñ Š/C€‰	 ôSß˜8ÐßR¬ÐÑÙÄGQQà@û¤‹áM}ªú9ó›|­¥ž@,ô-Œ\rz"eòKqýü,\'ñ`ïÏ\nHû"Û±¯¼lÿ\'R@ç‹µÙÕêã-7o1$%\nÇ©¦]®ˆÒ!9È£sÆêcvtÆ†‹ÝÇØŠ7Íã˜‚ä¢9TÆ`‰¸<ã[ožôŸï©—Çƒk²Ì‡tž$t0Í¢‘C1	$q†…Ê•y˜½øØ@ŸŠ\n½œ¨DAõN_“‹\rØ+v\\m/ŽâÞü¨ÒS\\K‚Á;¦(Dikÿ~íòR.£ð×$]dúnÓ»\n0MªÞ²FàªPôŸ}^îì|ò|Q“ñ"J[®ñ¥ùÆfñU‡™¡2¨¬ùC£2˜Xhˆ4­¿ðÉ½‡mÒ5’_,	V„R“ŒîTeÓpÙ¶¬ï‹ôÁ¿k‹¸-iÚ°2u0€Èãˆús­‚Ü9pMƒo\0\\‡¿#[wctG´ÈlóF©›¬£¿LÏ;Y‘Hú4Ã6÷Õ‚O½ü}HÀaäûø³R3ü5k®5=“ªTEGü£cñ4i€Ü\0¡Ø°i\\½\nŠæÃ W€¾ãrYÝ¢—±æuƒ›oVâû£Ÿ|Æúúq´	}ŸÐ4#š[û!i\r¸¬jÜÖ¡£>†*w‚VÄÙîF¥>Š›ÀA»Þ:¹yê+²åM/aÛšãÂ:\n–{>	VSµ)wälN\'vAr‹0êx•ï¨yfK“‹M9 üGõ)|ZÚTª“à¥æ±›’*)LÐÕY‹Ðº3CäZ•arP$Žä9Ð#×Ð¾tAaÚvM{šdƒ†>*Ê‘I!œq&–È‰T+0\0ßñÈéýÝ‚QÉ\'œÌKŽöî”=q$ÔÂt3áÃÌ^šlùG–¶ß%¿­˜]ë[­ÏfÌ©ˆâ‘õäÆèÇ&ëÀä§+ºÏAÌ«"âÁsL³þMÞUˆärµÍä<¢@q!#¢k×–ç8uNLÔˆÃ™IPT¹½WYïòÿ¥Ô€qZ3 .VéFQIÈ­6±šIÞ-ìpE9ØCÄÑ«Kój ùÞ7$ð²b"¶IýÜM2©Ì\nXh¬t(~ž>p"¸XGx•¦Rÿê„Ä–£A,eC˜{*<¡uÌºê’NþÈPCM¹uþxW¬,‘%‰mNH \0îY:èœþœ˜¶g61KÐš$¦ŒƒYpR˜}Ò_½—¤’¢ëe©¡\\Ê]òÝm­xù\x002Y›Õ^0ŠÖ†Ê˜ã6O”ÏF	YÔNñÃ>–Í}¨´4A.R€!>s^\'À«ö¼)=	ZrœtÊÅ\nš!ƒÊŸ2.”Ug|ä<o¤Øßô±.ºÅ±µÄ¯Æ‹<>ÚÓ¨Ï0¹TÇY¶‘\r$Ãß(oÛ—¯fã	¨á¡‰‚Ð_—ÝªÈ·Ðª:ƒîù~÷óµ“ÅvØÌP\n³Š\0?ïh‚\rÜ_Ö…[ïÍVHx°Qõ±x“dvQ¥ÍÂÉº´@N¹=e#0”Lá0¨|	\nº˜–æ¸Bí™•\'öíç`°Ë–£XT’¼rÏ¡cÖUçÿ¸i&MÀûùÍ¼5g"r®[šý[±C©é9ÐnÐÁ³n7üL›(ï„-QÃjjBƒ‡°,w{¤Òô¢NsIÂŒ®¾#£p5€vôP€Í=¥Ren¼Eyq]Å“†%¹Cõ3C=H \nÏ»þ¨Néè3¬ŒÃ,¸BXv¤ìå€Ô5œHr}%)A#/\0;„{1W]7Í\'EX>æ[÷½÷7©ºc±õø-å³æ@3ic¦ó§H|i7‘1¢¯@ê« |ëŒ+Q4¨€Þdÿ„Éé–­OÊÀô½Z’+Ý4êU¡vµt–ƒ> XE?@\0'.encode('l1')))
